@@ -1,0 +1,55 @@
+{
+  "name": "cortex-vision",
+  "description": "On-device vision capture MCP for Cortex (macOS). Grabs an image (screen capture, image file, or camera frame), runs an on-device Apple Vision task (OCR, scene labels, or barcodes), classifies the extracted text as a recall query or a memory, and returns it plus a routing hint. Eyes-only: it never reads or writes memories — the caller chains to the Cortex MCP recall/remember tools.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Clement Deust",
+    "email": "admin@ai-architect.tools"
+  },
+  "homepage": "https://github.com/cdeust/cortex-vision",
+  "repository": "https://github.com/cdeust/cortex-vision",
+  "license": "MIT",
+  "keywords": [
+    "vision",
+    "ocr",
+    "barcode",
+    "mcp",
+    "claude-code",
+    "cortex",
+    "apple-vision"
+  ],
+  "userConfig": {
+    "default_source": {
+      "type": "string",
+      "title": "Default capture source",
+      "description": "Where look grabs an image when called without an explicit source: 'screen' (ScreenCaptureKit/screencapture), 'file' (an image path), or 'camera' (AVFoundation frame grab).",
+      "default": "screen"
+    },
+    "default_task": {
+      "type": "string",
+      "title": "Default vision task",
+      "description": "Which Vision task look runs when called without an explicit task: 'ocr' (recognize text), 'scene' (classify/label), or 'barcode' (detect barcodes/QR).",
+      "default": "ocr"
+    },
+    "default_mode": {
+      "type": "string",
+      "title": "Default routing mode",
+      "description": "How look routes when called without an explicit mode: 'auto' (classify recall vs remember), 'recall', or 'remember'.",
+      "default": "auto"
+    }
+  },
+  "mcpServers": {
+    "cortex-vision": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/launcher.py",
+        "cortex_vision"
+      ],
+      "env": {
+        "VISION_DEFAULT_SOURCE": "${user_config.default_source}",
+        "VISION_DEFAULT_TASK": "${user_config.default_task}",
+        "VISION_DEFAULT_MODE": "${user_config.default_mode}"
+      }
+    }
+  }
+}

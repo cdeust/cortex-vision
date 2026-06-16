@@ -1,0 +1,30 @@
+{
+  "name": "cortex-vision-plugins",
+  "owner": {
+    "name": "Clement Deust",
+    "email": "admin@ai-architect.tools"
+  },
+  "metadata": {
+    "description": "On-device vision capture MCP for Cortex (macOS, Apple Vision)",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "cortex-vision",
+      "source": "./",
+      "description": "On-device vision capture MCP for Cortex (macOS). Grabs an image (screen, file, or camera), runs an on-device Apple Vision task (OCR, scene labels, or barcodes), classifies the extracted text as a recall query or a memory, and returns it plus a routing hint to the Cortex MCP. Eyes-only: never reads or writes memories itself.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Clement Deust",
+        "email": "admin@ai-architect.tools"
+      },
+      "homepage": "https://github.com/cdeust/cortex-vision",
+      "repository": "https://github.com/cdeust/cortex-vision",
+      "license": "MIT",
+      "keywords": ["vision", "ocr", "barcode", "mcp", "claude-code", "cortex", "apple-vision"],
+      "category": "productivity",
+      "runtime": ["cli"],
+      "runtime_notes": "macOS only. Requires swiftc (Xcode CLT). Camera frames need Camera permission; screen capture needs Screen Recording permission (System Settings — cannot be auto-granted)."
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+[project]
+name = "cortex-vision"
+version = "1.0.0"
+description = "On-device vision capture MCP for Cortex (macOS, Apple Vision)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Clement Deust", email = "admin@ai-architect.tools" }]
+dependencies = [
+    "fastmcp>=2.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+]
+
+[project.scripts]
+cortex-vision = "cortex_vision.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cortex_vision*"]
