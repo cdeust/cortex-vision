@@ -1,5 +1,7 @@
 # cortex-vision
 
+<p align="center"><img src="docs/assets/banner.svg" alt="cortex-vision — on-device Apple Vision capture MCP that turns a screen, file, or camera frame into text and a routing hint; eyes-only, never touches memory" width="100%"/></p>
+
 On-device **vision capture MCP for Cortex** (macOS). Point it at the screen, an
 image file, or your camera; it grabs one image, runs an on-device Apple Vision
 task (OCR, scene labels, or barcodes), decides whether the extracted text reads
