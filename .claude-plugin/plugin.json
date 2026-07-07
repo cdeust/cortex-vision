@@ -1,7 +1,7 @@
 {
   "name": "cortex-vision",
   "description": "On-device vision capture MCP for Cortex (macOS). Grabs an image (screen capture, image file, or camera frame), runs an on-device Apple Vision task (OCR, scene labels, or barcodes), classifies the extracted text as a recall query or a memory, and returns it plus a routing hint. Eyes-only: it never reads or writes memories — the caller chains to the Cortex MCP recall/remember tools.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "Clement Deust",
     "email": "admin@ai-architect.tools"
