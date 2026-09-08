@@ -3,3 +3,6 @@ deps/
 *.pyc
 __pycache__/
 .DS_Store
+
+# Agent dispatch worktrees — ephemeral, never committed
+.claude/worktrees/
