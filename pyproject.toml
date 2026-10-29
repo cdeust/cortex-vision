@@ -21,3 +21,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["cortex_vision*"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-cov>=6", "build>=1", "wheel", "setuptools>=68"]

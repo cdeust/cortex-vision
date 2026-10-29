@@ -1,0 +1,7 @@
+{
+  "unit": "python3 scripts/ci.py unit",
+  "regression": "python3 scripts/ci.py regression",
+  "e2e": "python3 scripts/ci.py e2e",
+  "environment": "python3 scripts/ci.py environment",
+  "install": "python3 scripts/ci.py install"
+}

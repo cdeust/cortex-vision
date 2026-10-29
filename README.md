@@ -71,3 +71,28 @@ env vars the server reads.
 ## License
 
 MIT.
+
+## CI validation
+
+`ci.json` runs five commands through `python3 scripts/ci.py`: `unit`,
+`regression`, `e2e`, `environment`, and `install`. The runner creates an isolated
+venv, installs the hash-locked `requirements-ci.txt`, and installs this package.
+`CI_WORK` optionally selects an existing scratch directory; otherwise the runner
+creates and removes its own temporary directory. `unit` also runs the generated
+native-review reader tests and writes `coverage.xml` with the shared 90% floor.
+
+The adapter tests use synthetic native-helper responses to verify routing,
+authorization reporting, argument forwarding, JSON parsing, and compilation
+errors. `e2e` launches the console entrypoint over real MCP stdio; `environment`
+launches the plugin manifest's configured launcher and configuration defaults.
+`install` builds a wheel, installs it in a fresh venv outside the checkout, and
+checks that installed entrypoint over stdio. Linux and Windows check the explicit
+macOS requirement; macOS checks startup without triggering permission prompts.
+These checks do not validate physical capture, Apple recognition accuracy, TCC
+authorization, or native Swift compilation on a real authorized host.
+
+To refresh dependency locks with uv: `uv lock`, then
+`uv export --locked --group dev --no-emit-project --format requirements-txt
+--output-file requirements-ci.txt`. Native review assets are generated with
+zetetic-team-subagents `scripts/setup.sh render-ci <repository> --native-review`;
+do not edit the generated workflows directly.
