@@ -26,3 +26,13 @@ exit 1
 Unmutated final suite passed as above; application source was never edited.
 
 Hosted exact-head results, native Claude/Codex review, and workflow bootstrap acceptance remain to be inspected by the orchestrator. Linux/Windows platform rejection is encoded in the protocol tests but was not locally run on those hosts. Synthetic helper fixtures exercise Python boundaries; they do not prove native Swift compilation, physical capture, recognition accuracy, or TCC permission readiness. The wheel validates Python startup; the Swift helper remains supplied by the plugin checkout, as on main.
+
+## macOS installation path follow-up
+
+Initial hosted macOS jobs failed after wheel installation: vision job 123229831617 in run 40807238994; voice job 123230175425 in run 40807245535. The original containment assertion compared canonical imported paths under `/private/var` against lexical scratch roots under `/var`.
+
+Reproduction using actual installed wheels and `CI_WORK=/tmp/...` reproduced exit 1 in both packages before the fix. The checker now canonicalizes both paths and takes the expected installation as a subprocess argument; unrelated roots are still rejected. The exact install command then exits 0 through the same alias and completes the installed MCP handshake.
+
+Three new import-location regressions cover normalized paths, POSIX symlink aliases and outside-root rejection. Removing canonicalization gives `2 failed, 1 passed`; restoring it gives `3 passed`. Direct checks using the actual installed wheel return 0 for its alias root and 1 for the checkout root.
+
+Final local unit suite: 40 passed plus 96 generated reviewer tests; application coverage unchanged. Regression, e2e, environment and install commands pass; actionlint and diff checks pass. Pytest scratch now lives inside CI_WORK so the runner owns and disposes its test outputs. Hosted results for the updated head remain pending.

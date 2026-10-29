@@ -37,9 +37,9 @@ def execute(mode, work):
     python = prepare(work)
     if mode == "unit":
         run(python, "-m", "unittest", "discover", "-s", "scripts/tests", "-q")
-        run(python, "-m", "pytest", "tests/test_adapter.py", "--cov=cortex_vision", "--cov-report=term-missing", "--cov-report=xml", "--cov-fail-under=90")
+        run(python, "-m", "pytest", "tests/test_adapter.py", "tests/test_ci_install_check.py", f"--basetemp={work / 'pytest'}", "--cov=cortex_vision", "--cov-report=term-missing", "--cov-report=xml", "--cov-fail-under=90")
     elif mode == "regression":
-        run(python, "-m", "pytest", "tests/test_adapter.py", "-k", "failures or errors or routing or platform_rejection")
+        run(python, "-m", "pytest", "tests/test_adapter.py", "tests/test_ci_install_check.py", f"--basetemp={work / 'pytest'}", "-k", "failures or errors or routing or platform_rejection or import_location or expected_environment or symlinked")
     elif mode == "e2e":
         executable = python.parent / ("cortex-vision.exe" if os.name == "nt" else "cortex-vision")
         protocol(python, executable, work, sys.platform != "darwin")
@@ -54,7 +54,7 @@ def execute(mode, work):
         installed = python_in(clean)
         run(installed, "-m", "pip", "install", "--require-hashes", "-r", ROOT / "requirements-ci.txt")
         run(installed, "-m", "pip", "install", "--no-deps", wheel)
-        run(installed, "-c", "import cortex_vision; from pathlib import Path; assert Path(cortex_vision.__file__).is_relative_to(Path(r'" + str(clean) + "'))", cwd=work)
+        run(installed, ROOT / "scripts/ci_install_check.py", "cortex_vision", clean, cwd=work)
         executable = installed.parent / ("cortex-vision.exe" if os.name == "nt" else "cortex-vision")
         protocol(installed, executable, work, sys.platform != "darwin")
     else:
