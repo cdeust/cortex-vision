@@ -126,10 +126,12 @@ jobs:
   # source: zetetic-team-subagents .github/workflows/pipeline.yml, merge job (#238, #239).
   merge:
     needs: [contract, unit, helper]
+    # Runs for every non-draft PR, forks included: a skipped job satisfies a required check
+    # (GitHub docs, control-jobs-with-conditions), so skipping here would let a red fork PR
+    # merge. Only the arming step is same-repository (Codex P2 on #6).
     if: >-
       always() && !cancelled() && github.event_name == 'pull_request'
       && !github.event.pull_request.draft
-      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -162,6 +164,7 @@ jobs:
       # source: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request
       # and https://cli.github.com/manual/gh_pr_merge (--auto, --match-head-commit).
       - name: Arm auto-merge, GitHub merges when the required checks pass
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
