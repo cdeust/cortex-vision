@@ -1,6 +1,6 @@
 [project]
 name = "cortex-vision"
-version = "1.0.0"
+version = "1.0.1"
 description = "On-device vision capture MCP for Cortex (macOS, Apple Vision)."
 readme = "README.md"
 requires-python = ">=3.10"
