@@ -88,8 +88,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install the package
-        run: python3 -m pip install --quiet .
+      # macos-latest ships Homebrew's Python, which is externally managed (PEP 668):
+      # `pip install` into it fails. A venv is the install path the error itself names.
+      # source: run 41792776479, helper job, "externally-managed-environment".
+      - name: Install the package in a virtual environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --quiet .
       - name: Build the capture helper and run it once
         env:
           # helper._plugin_root() reads this; without it an installed package resolves to
@@ -98,7 +103,7 @@ jobs:
           CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/viscap
         run: |
           swift --version
-          python3 - <<'EOF'
+          "$RUNNER_TEMP/venv/bin/python" - <<'EOF'
           import json
           import subprocess
           from cortex_vision.vision import helper
