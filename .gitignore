@@ -6,3 +6,7 @@ __pycache__/
 
 # Agent dispatch worktrees — ephemeral, never committed
 .claude/worktrees/
+
+# Python build artefacts
+build/
+*.egg-info/

@@ -1,0 +1,43 @@
+name: Merge hold
+
+# An armed auto-merge survives a later `do-not-merge` label or a "do not merge" title: the
+# Pipeline reads holds only before arming, and GitHub treats neither as a merge gate
+# (docs: automatically-merging-a-pull-request). This workflow runs on exactly those two
+# events and disarms, so an owner hold placed after the pipeline went green still holds.
+# Codex P2 on cortex-vision #6. Mirror of the hold read in pipeline.yml's merge job.
+
+on:
+  pull_request:
+    types: [labeled, edited]
+
+permissions: {}
+
+jobs:
+  disarm:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Disarm auto-merge when the PR carries an owner hold
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          held="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json title,labels \
+            --jq '[(.title | ascii_downcase | contains("do not merge")), ([.labels[].name | ascii_downcase] | index("do-not-merge") != null)] | any')"
+          if [ "$held" != "true" ]; then
+            echo "## Hold: none on this PR, nothing to disarm" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --disable-auto >disarm.log 2>&1; then
+            echo "## Hold: owner hold found, auto-merge disarmed" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cat disarm.log
+          # Nothing was armed, or the repository has auto-merge off: the hold already holds.
+          grep -qiE "not enabled|not allowed|no auto-merge|is not in auto-merge" disarm.log \
+            || { echo "::error::disarming auto-merge failed"; exit 1; }
+          echo "## Hold: owner hold found, nothing was armed" >> "$GITHUB_STEP_SUMMARY"

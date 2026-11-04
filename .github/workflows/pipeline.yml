@@ -1,0 +1,205 @@
+name: Pipeline
+
+# The CI of cortex-vision, on the Cortex model (cdeust/Cortex .github/workflows/pipeline.yml):
+# contract, unit and helper on every pull request, then `merge`, the aggregate that branch
+# protection requires. Authored for this repository; nothing here is rendered from a template
+# (owner rule 2026-11-04: Cortex's CI is the reference, no repository's CI is re-rendered).
+# Reviews run beside it: Codex (GitHub App) and Claude (.github/workflows/claude-review.yml).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: pipeline-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The package declares itself correctly and every Python file compiles.
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Validate pyproject.toml and the plugin manifest
+        run: |
+          python3 - <<'EOF'
+          import json, re, sys, tomllib
+          project = tomllib.load(open("pyproject.toml", "rb"))["project"]
+          plugin = json.load(open(".claude-plugin/plugin.json"))
+          # source: https://packaging.python.org/en/latest/specifications/version-specifiers/
+          semver = re.compile(r"^\d+\.\d+\.\d+$")
+          problems = []
+          if not semver.match(project["version"]):
+              problems.append(f"pyproject version {project['version']!r} is not MAJOR.MINOR.PATCH")
+          if plugin.get("version") != project["version"]:
+              problems.append(f"plugin.json version {plugin.get('version')!r} != pyproject {project['version']!r}")
+          if project["name"] != "cortex-vision":
+              problems.append(f"project name {project['name']!r}")
+          for p in problems:
+              print(f"::error::{p}")
+          sys.exit(1 if problems else 0)
+          EOF
+      - name: Compile every Python file
+        run: python3 -m compileall -q cortex_vision scripts/launcher.py tests
+
+  # The package installs from source and its import-level tests pass on Linux: the
+  # macOS-only helper is exercised by `helper`, not here.
+  unit:
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install the package and pytest
+        run: python3 -m pip install --quiet . pytest
+      - name: Run the tests
+        run: python3 -m pytest -q tests
+
+  # The capture helper builds on macOS the way the product builds it: through
+  # cortex_vision.vision.helper.ensure_binary (xcrun swiftc, the six frameworks, the
+  # embedded Info.plist, ad-hoc codesign). Apple Vision, AVFoundation and ScreenCaptureKit
+  # exist only on macOS. A build proves the source, not the permissions (Camera, Screen
+  # Recording), which only a signed-in session can grant.
+  helper:
+    needs: contract
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # macos-latest ships Homebrew's Python, which is externally managed (PEP 668):
+      # `pip install` into it fails. A venv is the install path the error itself names.
+      # source: run 41792776479, helper job, "externally-managed-environment".
+      - name: Install the package in a virtual environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --quiet .
+      - name: Build the capture helper and run it once
+        env:
+          # helper._plugin_root() reads this; without it an installed package resolves to
+          # site-packages, where scripts/viscap.swift does not exist.
+          CLAUDE_PLUGIN_ROOT: ${{ github.workspace }}
+          CLAUDE_PLUGIN_DATA: ${{ runner.temp }}/viscap
+        run: |
+          swift --version
+          "$RUNNER_TEMP/venv/bin/python" - <<'EOF'
+          import json
+          import subprocess
+          from cortex_vision.vision import helper
+          binary = helper.ensure_binary()
+          print("built", binary)
+          # Not --check-auth: requestCameraAuth() blocks on a TCC prompt that a hosted runner
+          # never answers (viscap.swift:56-61). An unknown mode runs the binary end to end and
+          # exits 1 with one JSON object (fail(), viscap.swift:33-36): the contract measured.
+          out = subprocess.run([str(binary), "--ci-smoke"], capture_output=True, text=True, timeout=60)
+          print(out.stdout.strip()[-500:])
+          assert out.returncode == 1, out.returncode
+          assert json.loads(out.stdout)["error"] == "unknown mode --ci-smoke", out.stdout
+          EOF
+
+  # The aggregate of the jobs of this run: green when they all are. It reads nothing else
+  # (no main, no review state). When they are green it arms GitHub's native auto-merge on
+  # this PR, so the merge happens with this PR's own definition and nothing from main's: a
+  # PR that fixes the pipeline is merged by the pipeline it fixes (owner rule 2026-11-03).
+  # Branch protection stays the only gate: GitHub squashes when the required checks pass.
+  # source: zetetic-team-subagents .github/workflows/pipeline.yml, merge job (#238, #239).
+  merge:
+    needs: [contract, unit, helper]
+    # Runs for every non-draft PR, forks included: a skipped job satisfies a required check
+    # (GitHub docs, control-jobs-with-conditions), so skipping here would let a red fork PR
+    # merge. Only the arming step is same-repository (Codex P2 on #6).
+    if: >-
+      always() && !cancelled() && github.event_name == 'pull_request'
+      && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Require the jobs of this run
+        env:
+          CONTRACT: ${{ needs.contract.result }}
+          UNIT: ${{ needs.unit.result }}
+          HELPER: ${{ needs.helper.result }}
+        run: |
+          blocked=""
+          for pair in "contract=$CONTRACT" "unit=$UNIT" "helper=$HELPER"; do
+            case "$pair" in
+              *=success) ;;
+              *) echo "::error::${pair%%=*}: ${pair#*=}, needs success"; blocked=1 ;;
+            esac
+          done
+          if [ -n "$blocked" ]; then
+            echo "## Merge: blocked, a job is not green on this commit" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "## Merge: the jobs are green on this commit" >> "$GITHUB_STEP_SUMMARY"
+
+      # This job is itself a required check and still running, so a direct merge here would
+      # be refused; auto-merge lets GitHub perform the squash the moment branch protection is
+      # satisfied. --match-head-commit binds the arming to this head: a later push disarms it
+      # until its own run passes.
+      # source: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request
+      # and https://cli.github.com/manual/gh_pr_merge (--auto, --match-head-commit).
+      - name: Arm auto-merge, GitHub merges when the required checks pass
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$BASE" != "main" ]; then
+            echo "## Merge: jobs green; base is $BASE, not main, auto-merge not armed" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Owner holds stay owner holds: a do-not-merge label or a "do not merge" title is
+          # read live before arming, and a hold found here revokes any earlier arming
+          # (GitHub keeps an armed request across a writer's push).
+          held="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json title,labels \
+            --jq '[(.title | ascii_downcase | contains("do not merge")), ([.labels[].name | ascii_downcase] | index("do-not-merge") != null)] | any')"
+          if [ "$held" = "true" ]; then
+            if ! gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --disable-auto >disarm.log 2>&1; then
+              grep -qiE "not enabled|not allowed|no auto-merge|is not in auto-merge" disarm.log || { cat disarm.log; echo "::error::disarming auto-merge failed"; exit 1; }
+            fi
+            echo "## Merge: jobs green, owner hold on the PR (do-not-merge label or title), auto-merge not armed, any earlier arming revoked" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$HEAD" >arm.log 2>&1; then
+            echo "## Merge: auto-merge armed for $HEAD, GitHub merges when the required checks pass" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cat arm.log
+          if grep -qiE "already enabled|clean status|already (been )?merged" arm.log; then
+            echo "## Merge: auto-merge was already armed or the PR is already merged" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if grep -qiE "not allowed|not enabled" arm.log; then
+            echo "::warning::auto-merge is disabled in this repository's settings (Settings > General > Allow auto-merge); the owner merges this PR"
+            echo "## Merge: jobs green; auto-merge is disabled in Settings, the owner merges" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::arming auto-merge failed"
+          exit 1
