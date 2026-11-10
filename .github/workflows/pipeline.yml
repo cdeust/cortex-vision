@@ -4,7 +4,8 @@ name: Pipeline
 # contract, unit and helper on every pull request, then `merge`, the aggregate that branch
 # protection requires. Authored for this repository; nothing here is rendered from a template
 # (owner rule 2026-11-04: Cortex's CI is the reference, no repository's CI is re-rendered).
-# Reviews run beside it: Codex (GitHub App) and Claude (.github/workflows/claude-review.yml).
+# Reviews run beside it: Codex (GitHub App) and Claude (.github/workflows/claude-review.yml),
+# whose verdict decides the merge (.github/workflows/pipeline-after-merge.yml).
 
 on:
   pull_request:
@@ -71,7 +72,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install the package and pytest
-        run: python3 -m pip install --quiet . pytest
+        run: python3 -m pip install --quiet . pytest pyyaml
       - name: Run the tests
         run: python3 -m pytest -q tests
 
@@ -119,24 +120,21 @@ jobs:
           EOF
 
   # The aggregate of the jobs of this run: green when they all are. It reads nothing else
-  # (no main, no review state). When they are green it arms GitHub's native auto-merge on
-  # this PR, so the merge happens with this PR's own definition and nothing from main's: a
-  # PR that fixes the pipeline is merged by the pipeline it fixes (owner rule 2026-11-03).
-  # Branch protection stays the only gate: GitHub squashes when the required checks pass.
-  # source: zetetic-team-subagents .github/workflows/pipeline.yml, merge job (#238, #239).
+  # (no main, no review state) and merges nothing: the resolver
+  # (.github/workflows/pipeline-after-merge.yml) merges once the Claude review of this head
+  # approves (Cortex ADR-1121).
   merge:
     needs: [contract, unit, helper]
     # Runs for every non-draft PR, forks included: a skipped job satisfies a required check
     # (GitHub docs, control-jobs-with-conditions), so skipping here would let a red fork PR
-    # merge. Only the arming step is same-repository (Codex P2 on #6).
+    # merge (Codex P2 on #6).
     if: >-
       always() && !cancelled() && github.event_name == 'pull_request'
       && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Require the jobs of this run
         env:
@@ -156,50 +154,3 @@ jobs:
             exit 1
           fi
           echo "## Merge: the jobs are green on this commit" >> "$GITHUB_STEP_SUMMARY"
-
-      # This job is itself a required check and still running, so a direct merge here would
-      # be refused; auto-merge lets GitHub perform the squash the moment branch protection is
-      # satisfied. --match-head-commit binds the arming to this head: a later push disarms it
-      # until its own run passes.
-      # source: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/automatically-merging-a-pull-request
-      # and https://cli.github.com/manual/gh_pr_merge (--auto, --match-head-commit).
-      - name: Arm auto-merge, GitHub merges when the required checks pass
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-          BASE: ${{ github.event.pull_request.base.ref }}
-        run: |
-          if [ "$BASE" != "main" ]; then
-            echo "## Merge: jobs green; base is $BASE, not main, auto-merge not armed" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          # Owner holds stay owner holds: a do-not-merge label or a "do not merge" title is
-          # read live before arming, and a hold found here revokes any earlier arming
-          # (GitHub keeps an armed request across a writer's push).
-          held="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json title,labels \
-            --jq '[(.title | ascii_downcase | contains("do not merge")), ([.labels[].name | ascii_downcase] | index("do-not-merge") != null)] | any')"
-          if [ "$held" = "true" ]; then
-            if ! gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --disable-auto >disarm.log 2>&1; then
-              grep -qiE "not enabled|not allowed|no auto-merge|is not in auto-merge" disarm.log || { cat disarm.log; echo "::error::disarming auto-merge failed"; exit 1; }
-            fi
-            echo "## Merge: jobs green, owner hold on the PR (do-not-merge label or title), auto-merge not armed, any earlier arming revoked" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$HEAD" >arm.log 2>&1; then
-            echo "## Merge: auto-merge armed for $HEAD, GitHub merges when the required checks pass" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          cat arm.log
-          if grep -qiE "already enabled|clean status|already (been )?merged" arm.log; then
-            echo "## Merge: auto-merge was already armed or the PR is already merged" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if grep -qiE "not allowed|not enabled" arm.log; then
-            echo "::warning::auto-merge is disabled in this repository's settings (Settings > General > Allow auto-merge); the owner merges this PR"
-            echo "## Merge: jobs green; auto-merge is disabled in Settings, the owner merges" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          echo "::error::arming auto-merge failed"
-          exit 1
