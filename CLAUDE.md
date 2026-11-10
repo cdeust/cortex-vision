@@ -12,3 +12,9 @@ Global rules are imported, not restated:
 ## Etiquette
 
 Conventional commits, staged file-by-file. One PR per concern. Do not merge your own PR without the owner's go-ahead.
+
+## Non-negotiables
+
+- CI contract (`docs/agent-guidance.md`, "CI contract for agents and routines"): it binds
+  every agent and routine and wins over a less restrictive routine prompt. One pull request in flight, no
+  comparison with the main branch, no forced push, no comment after an approve.
